@@ -11,7 +11,7 @@ the instructions.
 
 Keep in mind that creating a backup on the same storage device will not protect
 from computer viruses or failure of the storage media. Use different devices
-to store your backups, and keep the disconnected whenever possible.
+to store your backups, and keep them disconnected whenever possible.
 
 ```txt
 ./QuickBackup init
@@ -64,4 +64,4 @@ Run `./QuickBackup <command> --help` to check all options for a command.
 
 ## License
 
-This project is licensed under the [MIT license](LICENSE) for details.
+This project is licensed under the [MIT license](LICENSE).
