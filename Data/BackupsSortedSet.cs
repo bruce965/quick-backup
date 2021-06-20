@@ -11,14 +11,14 @@ namespace QuickBackup.Data
 	/// </summary>
 	public class BackupsSortedSet : SortedSet<BackupInfo>
 	{
-		class ItemComparer : IComparer<BackupInfo>
+		class SortByDate : IComparer<BackupInfo>
 		{
-			public static ItemComparer Instance { get; }
-				= new ItemComparer();
+			public static SortByDate Instance { get; }
+				= new SortByDate();
 
-			protected ItemComparer() { }
+			protected SortByDate() { }
 
-			public int Compare(BackupInfo? x, BackupInfo? y)
+			int IComparer<BackupInfo>.Compare(BackupInfo? x, BackupInfo? y)
 			{
 				if (x == null)
 				{
@@ -36,38 +36,55 @@ namespace QuickBackup.Data
 			}
 		}
 
-		public BackupsSortedSet()
-			: base(ItemComparer.Instance) { }
+		/// <summary>
+		/// Get latest backup of any type, preferably excluding partial backups.
+		/// </summary>
+		public BackupInfo? Latest
+			=> this.LastOrDefault(b => !b.IsPartial) ?? this.LastOrDefault();
 
-		public BackupInfo? Find(DateTime date, BackupType type, DayOfWeek firstDayOfWeek)
+		public BackupsSortedSet()
+			: base(SortByDate.Instance) { }
+
+		/// <summary>
+		/// Find a backup by date and type, preferably excluding partial backups.
+		/// </summary>
+		/// <param name="date">Backup date.</param>
+		/// <param name="type">Backup type.</param>
+		/// <param name="firstDayOfWeek">First day of the week (used for weekly backups).</param>
+		/// <param name="allowPartial">Accept partial backups (only if no complete backup is available).</param>
+		/// <returns>Backup by date and type, preferably not partial.</returns>
+		public BackupInfo? Find(DateTime date, BackupType type, DayOfWeek firstDayOfWeek = default, bool allowPartial = false)
+			=> Find(this.Where(b => !b.IsPartial), date, type, firstDayOfWeek) ?? (allowPartial ? Find(this, date, type, firstDayOfWeek) : null);
+
+		static BackupInfo? Find(IEnumerable<BackupInfo> backups, DateTime date, BackupType type, DayOfWeek firstDayOfWeek)
 		{
 			switch (type)
 			{
 				case BackupType.OnDemand:
-					return this.FirstOrDefault(b => b.Type == BackupType.OnDemand && b.Date == date);
+					return backups.FirstOrDefault(b => b.IsOnDemand && b.Date == date);
 
 				case BackupType.AtBoot:
 					var bootDate = DateTime.Now - SystemUptime.GetUptime();  // assuming the clock didn't change since boot
 					if (date < bootDate)
-						return this.LastOrDefault(b => b.Type.HasFlag(BackupType.AtBoot) && b.Date <= date);
+						return backups.LastOrDefault(b => b.IsAtBoot && b.Date <= date);
 					else
-						return this.FirstOrDefault(b => b.Type.HasFlag(BackupType.AtBoot) && b.Date >= bootDate);
+						return backups.FirstOrDefault(b => b.IsAtBoot && b.Date >= bootDate);
 
 				case BackupType.Yearly:
-					return this.FirstOrDefault(b => b.Type.HasFlag(BackupType.Yearly) && b.Date.Year == date.Year);
+					return backups.FirstOrDefault(b => b.IsYearly && b.Date.Year == date.Year);
 
 				case BackupType.Monthly:
-					return this.FirstOrDefault(b => b.Type.HasFlag(BackupType.Monthly) && b.Date.Year == date.Year && b.Date.Month == date.Month);
+					return backups.FirstOrDefault(b => b.IsMonthly && b.Date.Year == date.Year && b.Date.Month == date.Month);
 
 				case BackupType.Weekly:
 					var calendar = CultureInfo.InvariantCulture.Calendar;
-					return this.FirstOrDefault(b => b.Type.HasFlag(BackupType.Weekly) && b.Date.Year == date.Year && calendar.GetWeekOfYear(b.Date, CalendarWeekRule.FirstDay, firstDayOfWeek) == calendar.GetWeekOfYear(date, CalendarWeekRule.FirstDay, firstDayOfWeek));
+					return backups.FirstOrDefault(b => b.IsWeekly && b.Date.Year == date.Year && calendar.GetWeekOfYear(b.Date, CalendarWeekRule.FirstDay, firstDayOfWeek) == calendar.GetWeekOfYear(date, CalendarWeekRule.FirstDay, firstDayOfWeek));
 
 				case BackupType.Daily:
-					return this.FirstOrDefault(b => b.Type.HasFlag(BackupType.Daily) && b.Date.Date == date.Date);
+					return backups.FirstOrDefault(b => b.IsDaily && b.Date.Date == date.Date);
 
 				case BackupType.Hourly:
-					return this.FirstOrDefault(b => b.Type.HasFlag(BackupType.Hourly) && b.Date.Date == date.Date && b.Date.Hour == date.Hour);
+					return backups.FirstOrDefault(b => b.IsHourly && b.Date.Date == date.Date && b.Date.Hour == date.Hour);
 
 				default:
 					throw new ArgumentException($"Cannot search for a backup of type '{type}'.", nameof(type));

@@ -44,7 +44,7 @@ After configuring, run `./QuickBackup backup <path>` to generate a backup copy.
 
 ```
 ./QuickBackup backup "~/Desktop/My Important Data/"
-Backing up 1 path(s) to '~/Desktop/My Important Data/.backups'...
+Backing up 1 path(s)...
 Backing up from '~/Desktop/My Important Data/' to '~/Desktop/My Important Data/.backups/2021-06-19_22-05-19_boot'...
 Backup type: AtBoot, Daily
 Latest backup path: '~/Desktop/My Important Data/.backups/2021-06-18_20-04-42'
@@ -52,6 +52,9 @@ Latest backup path: '~/Desktop/My Important Data/.backups/2021-06-18_20-04-42'
 'Old Picture.jpg' unchanged, hard-linked
 'Updated Document.docx' changed, copied
 '.backups' skipped (excluded)
+Done.
+Cleaning old backups from '~/Desktop/My Important Data/.backups/.'...
+Cleaning '~/Desktop/My Important Data/.backups/2021-06-13_15-04-53_boot'... ok
 Done.
 ```
 

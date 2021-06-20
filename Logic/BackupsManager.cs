@@ -37,12 +37,174 @@ namespace QuickBackup.Logic
 
 		public async Task CleanOldBackupsAsync()
 		{
-			await Console.Out.WriteLineAsync("Cleaning old backups...");
+			var targetPath = Path.Combine(BasePath, Backup.TargetPath.ToString());
+
+			await Console.Out.WriteLineAsync($"Cleaning old backups from '{targetPath}'...{(DryRun ? " (DRY-RUN)" : "")}");
 
 			var backups = await GetBackupsSetAsync();
 
-			// TODO: clean.
-			await Console.Error.WriteLineAsync("Not implemented, backups will not be cleaned.");
+			var remainingOnDemand = Backup.OnDemandCount;
+			var remainingAtBoot = Backup.AtBootCount;
+			var remainingYearly = Backup.YearlyCount;
+			var remainingMonthly = Backup.MonthlyCount;
+			var remainingWeekly = Backup.WeeklyCount;
+			var remainingDaily = Backup.DailyCount;
+			var remainingHourly = Backup.HourlyCount;
+
+			var remainingOnDemandPlusPartial = remainingOnDemand;
+			var remainingAtBootPlusPartial = remainingAtBoot;
+			var remainingYearlyPlusPartial = remainingYearly;
+			var remainingMonthlyPlusPartial = remainingMonthly;
+			var remainingWeeklyPlusPartial = remainingWeekly;
+			var remainingDailyPlusPartial = remainingDaily;
+			var remainingHourlyPlusPartial = remainingHourly;
+
+			var backupsSortedByMostRecent = backups.Reverse().ToList();
+			foreach (var backup in backupsSortedByMostRecent)
+			{
+				var keep = false;
+
+				if ((remainingOnDemand > 0 || remainingOnDemand == null) && backup.IsOnDemand)
+				{
+					if (backup.IsPartial)
+					{
+						if (remainingOnDemandPlusPartial > 0)
+						{
+							remainingOnDemandPlusPartial--;
+							keep = true;
+						}
+					}
+					else
+					{
+						remainingOnDemand--;
+						remainingOnDemandPlusPartial--;
+						keep = true;
+					}
+				}
+
+				if (remainingAtBoot > 0 && backup.IsAtBoot)
+				{
+					if (backup.IsPartial)
+					{
+						if (remainingAtBootPlusPartial > 0)
+						{
+							remainingAtBootPlusPartial--;
+							keep = true;
+						}
+					}
+					else
+					{
+						remainingAtBoot--;
+						remainingAtBootPlusPartial--;
+						keep = true;
+					}
+				}
+
+				if (remainingYearly > 0 && backup.IsYearly)
+				{
+					if (backup.IsPartial)
+					{
+						if (remainingYearlyPlusPartial > 0)
+						{
+							remainingYearlyPlusPartial--;
+							keep = true;
+						}
+					}
+					else
+					{
+						remainingYearly--;
+						remainingYearlyPlusPartial--;
+						keep = true;
+					}
+				}
+
+				if (remainingMonthly > 0 && backup.IsMonthly)
+				{
+					if (backup.IsPartial)
+					{
+						if (remainingMonthlyPlusPartial > 0)
+						{
+							remainingMonthlyPlusPartial--;
+							keep = true;
+						}
+					}
+					else
+					{
+						remainingMonthly--;
+						remainingMonthlyPlusPartial--;
+						keep = true;
+					}
+				}
+
+				if (remainingWeekly > 0 && backup.IsWeekly)
+				{
+					if (backup.IsPartial)
+					{
+						if (remainingWeeklyPlusPartial > 0)
+						{
+							remainingWeeklyPlusPartial--;
+							keep = true;
+						}
+					}
+					else
+					{
+						remainingWeekly--;
+						remainingWeeklyPlusPartial--;
+						keep = true;
+					}
+				}
+
+				if (remainingDaily > 0 && backup.IsDaily)
+				{
+					if (backup.IsPartial)
+					{
+						if (remainingDailyPlusPartial > 0)
+						{
+							remainingDailyPlusPartial--;
+							keep = true;
+						}
+					}
+					else
+					{
+						remainingDaily--;
+						remainingDailyPlusPartial--;
+						keep = true;
+					}
+				}
+
+				if (remainingHourly > 0 && backup.IsHourly)
+				{
+					if (backup.IsPartial)
+					{
+						if (remainingHourlyPlusPartial > 0)
+						{
+							remainingHourlyPlusPartial--;
+							keep = true;
+						}
+					}
+					else
+					{
+						remainingHourly--;
+						remainingHourlyPlusPartial--;
+						keep = true;
+					}
+				}
+
+				if (!keep)
+				{
+					await Console.Out.WriteAsync($"Cleaning '{backup.Path}'...");
+
+					if (!DryRun)
+					{
+						var partialPath = backup.Path.ToString() + Common.PartialSuffix;
+						backup.Path.MoveTo(partialPath);  // async currently not supported
+						Directory.Delete(partialPath, true);  // async currently not supported
+					}
+
+					await Console.Out.WriteLineAsync(" ok");
+
+				}
+			}
 
 			await Console.Out.WriteLineAsync("Done.");
 		}
@@ -66,6 +228,10 @@ namespace QuickBackup.Logic
 			{
 				var name = directory.Name;
 
+				var isPartial = name.EndsWith(Common.PartialSuffix);
+				if (isPartial)
+					name = name.Substring(0, name.Length - Common.PartialSuffix.Length);
+
 				var isOnDemand = name.EndsWith(Common.OnDemandSuffix);
 				if (isOnDemand)
 					name = name.Substring(0, name.Length - Common.OnDemandSuffix.Length);
@@ -81,11 +247,11 @@ namespace QuickBackup.Logic
 				if (!isOnDemand)
 				{
 					// only the first backup for each period counts
-					var isYearly = backups.Find(date, BackupType.Yearly, Config.FirstDayOfWeek) == null;
-					var isMonthly = backups.Find(date, BackupType.Monthly, Config.FirstDayOfWeek) == null;
+					var isYearly = backups.Find(date, BackupType.Yearly) == null;
+					var isMonthly = backups.Find(date, BackupType.Monthly) == null;
 					var isWeekly = backups.Find(date, BackupType.Weekly, Config.FirstDayOfWeek) == null;
-					var isDaily = backups.Find(date, BackupType.Daily, Config.FirstDayOfWeek) == null;
-					var isHourly = backups.Find(date, BackupType.Hourly, Config.FirstDayOfWeek) == null;
+					var isDaily = backups.Find(date, BackupType.Daily) == null;
+					var isHourly = backups.Find(date, BackupType.Hourly) == null;
 
 					type = (
 						default(BackupType)
@@ -98,7 +264,12 @@ namespace QuickBackup.Logic
 					);
 				}
 
-				backups.Add(new BackupInfo(directory, date, type));
+				var backup = new BackupInfo(directory, date, type)
+				{
+					IsPartial = isPartial,
+				};
+
+				backups.Add(backup);
 			}
 
 			return Task.FromResult(backups);

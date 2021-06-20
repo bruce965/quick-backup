@@ -8,7 +8,7 @@ namespace QuickBackup.Data
 		/// <summary>
 		/// On-demand backup, unscheduled.
 		/// </summary>
-		OnDemand = 0,
+		OnDemand = 0,  // no flags
 
 		/// <summary>
 		/// First backup after boot.

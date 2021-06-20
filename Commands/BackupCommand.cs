@@ -53,7 +53,7 @@ namespace QuickBackup.Commands
 
 		public static async Task ProcessAll(BackupConfig config, string path, bool dryRun, bool onDemand)
 		{
-			await Console.Out.WriteLineAsync($"Backing up {config.Backups.Count} path(s) to '{path}'...{(dryRun ? " (DRY-RUN)" : "")}");
+			await Console.Out.WriteLineAsync($"Backing up {config.Backups.Count} path(s)...{(dryRun ? " (DRY-RUN)" : "")}");
 
 			foreach (var backup in config.Backups)
 			{
@@ -77,7 +77,7 @@ namespace QuickBackup.Commands
 			};
 
 			var backups = await manager.GetBackupsSetAsync();
-			var latestBackupPath = backups.LastOrDefault()?.Path.ToString();
+			var latestBackupPath = backups.Latest?.Path.ToString();  // note: may be a partial backup
 
 			var date = DateTime.Now;
 
@@ -100,12 +100,12 @@ namespace QuickBackup.Commands
 			}
 			else
 			{
-				var isAtBoot = manager.Backup.AtBootCount > 0 && backups.Find(date, BackupType.AtBoot, manager.Config.FirstDayOfWeek) == null;
-				var isYearly = manager.Backup.YearlyCount > 0 && backups.Find(date, BackupType.Yearly, manager.Config.FirstDayOfWeek) == null;
-				var isMonthly = manager.Backup.MonthlyCount > 0 && backups.Find(date, BackupType.Monthly, manager.Config.FirstDayOfWeek) == null;
-				var isWeekly = manager.Backup.WeeklyCount > 0 && backups.Find(date, BackupType.Weekly, manager.Config.FirstDayOfWeek) == null;
-				var isDaily = manager.Backup.DailyCount > 0 && backups.Find(date, BackupType.Daily, manager.Config.FirstDayOfWeek) == null;
-				var isHourly = manager.Backup.HourlyCount > 0 && backups.Find(date, BackupType.Hourly, manager.Config.FirstDayOfWeek) == null;
+				var isAtBoot = manager.Backup.AtBootCount > 0 && backups.Find(date, BackupType.AtBoot, allowPartial: true) == null;
+				var isYearly = manager.Backup.YearlyCount > 0 && backups.Find(date, BackupType.Yearly, allowPartial: true) == null;
+				var isMonthly = manager.Backup.MonthlyCount > 0 && backups.Find(date, BackupType.Monthly, allowPartial: true) == null;
+				var isWeekly = manager.Backup.WeeklyCount > 0 && backups.Find(date, BackupType.Weekly, manager.Config.FirstDayOfWeek, allowPartial: true) == null;
+				var isDaily = manager.Backup.DailyCount > 0 && backups.Find(date, BackupType.Daily, allowPartial: true) == null;
+				var isHourly = manager.Backup.HourlyCount > 0 && backups.Find(date, BackupType.Hourly, allowPartial: true) == null;
 
 				var type = (
 					default(BackupType)
@@ -140,7 +140,8 @@ namespace QuickBackup.Commands
 				}
 			}
 
-			await Console.Out.WriteLineAsync();
+			if (manager.Backup.AutoClean)
+				await manager.CleanOldBackupsAsync();
 		}
 
 		public static async Task<BackupInfo> DoBackup(

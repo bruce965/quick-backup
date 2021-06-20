@@ -13,6 +13,9 @@ namespace QuickBackup.Config
 		public DirectoryInfo TargetPath { get; set; }
 			= new DirectoryInfo(Common.DefaultTargetDirectory);
 
+		[JsonPropertyName("onDemand")]
+		public int? OnDemandCount { get; set; }
+
 		[JsonPropertyName("boot")]
 		public int AtBootCount { get; set; }
 
@@ -33,8 +36,14 @@ namespace QuickBackup.Config
 
 		[JsonPropertyName("link")]
 		public bool UseHardLinks { get; set; }
+			= true;
 
 		[JsonPropertyName("fast")]
 		public bool FastCompare { get; set; }
+			= true;
+
+		[JsonPropertyName("autoClean")]
+		public bool AutoClean { get; set; }
+			= true;
 	}
 }
