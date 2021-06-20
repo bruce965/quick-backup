@@ -16,6 +16,7 @@ namespace QuickBackup
 			rootCommand.Add(new InitCommand());
 			rootCommand.Add(new BackupCommand());
 			rootCommand.Add(new CleanCommand());
+			rootCommand.Add(new ListCommand());
 
 			return rootCommand.InvokeAsync(args);
 		}

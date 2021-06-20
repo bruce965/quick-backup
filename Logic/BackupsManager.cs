@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Linq;
@@ -35,12 +36,8 @@ namespace QuickBackup.Logic
 			return backups;
 		}
 
-		public async Task CleanOldBackupsAsync()
+		public async Task<List<BackupInfo>> GetOldBackupsListAsync()
 		{
-			var targetPath = Path.Combine(BasePath, Backup.TargetPath.ToString());
-
-			await Console.Out.WriteLineAsync($"Cleaning old backups from '{targetPath}'...{(DryRun ? " (DRY-RUN)" : "")}");
-
 			var backups = await GetBackupsSetAsync();
 
 			var remainingOnDemand = Backup.OnDemandCount;
@@ -59,8 +56,9 @@ namespace QuickBackup.Logic
 			var remainingDailyPlusPartial = remainingDaily;
 			var remainingHourlyPlusPartial = remainingHourly;
 
-			var backupsSortedByMostRecent = backups.Reverse().ToList();
-			foreach (var backup in backupsSortedByMostRecent)
+			var toBeRemoved = new List<BackupInfo>();
+
+			foreach (var backup in backups.Reverse())
 			{
 				var keep = false;
 
@@ -192,18 +190,33 @@ namespace QuickBackup.Logic
 
 				if (!keep)
 				{
-					await Console.Out.WriteAsync($"Cleaning '{backup.Path}'...");
-
-					if (!DryRun)
-					{
-						var partialPath = backup.Path.ToString() + Common.PartialSuffix;
-						backup.Path.MoveTo(partialPath);  // async currently not supported
-						Directory.Delete(partialPath, true);  // async currently not supported
-					}
-
-					await Console.Out.WriteLineAsync(" ok");
-
+					toBeRemoved.Add(backup);
 				}
+			}
+
+			return toBeRemoved;
+		}
+
+		public async Task CleanOldBackupsAsync()
+		{
+			var targetPath = Path.Combine(BasePath, Backup.TargetPath.ToString());
+
+			await Console.Out.WriteLineAsync($"Cleaning old backups from '{targetPath}'...{(DryRun ? " (DRY-RUN)" : "")}");
+
+			foreach (var backup in await GetOldBackupsListAsync())
+			{
+				await Console.Out.WriteAsync($"Cleaning '{backup.Path}'...");
+
+				if (!DryRun)
+				{
+					var partialPath = backup.Path.ToString() + Common.PartialSuffix;
+					backup.Path.MoveTo(partialPath);  // async currently not supported
+					Directory.Delete(partialPath, true);  // async currently not supported
+				}
+
+				await Console.Out.WriteLineAsync(" ok");
+
+				(await backups!).Remove(backup);
 			}
 
 			await Console.Out.WriteLineAsync("Done.");
