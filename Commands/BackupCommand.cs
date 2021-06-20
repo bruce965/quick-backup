@@ -4,8 +4,10 @@ using System.CommandLine;
 using System.CommandLine.Invocation;
 using System.Globalization;
 using System.IO;
+using System.Linq;
 using System.Threading.Tasks;
 using QuickBackup.Config;
+using QuickBackup.Logic;
 using QuickBackup.Utility;
 
 namespace QuickBackup.Commands
@@ -53,33 +55,41 @@ namespace QuickBackup.Commands
 			await Console.Out.WriteLineAsync($"Backing up {config.Backups.Count} path(s) to '{path}'...{(dryRun ? " (DRY-RUN)" : "")}");
 
 			foreach (var backup in config.Backups)
-				await ProcessOne(backup, path, dryRun, onDemand);
+			{
+				var manager = new BackupsManager(path, config, backup)
+				{
+					DryRun = dryRun,
+				};
+
+				await ProcessOne(manager, onDemand);
+			}
 		}
 
-		public static async Task ProcessOne(Backup backup, string path, bool dryRun, bool onDemand)
+		public static async Task ProcessOne(BackupsManager manager, bool onDemand)
 		{
-			var sourcePath = Path.GetFullPath(Path.Combine(path, backup.SourcePath.ToString()));
-			var targetPath = Path.GetFullPath(Path.Combine(path, backup.TargetPath.ToString()));
+			var sourcePath = Path.Combine(manager.BasePath, manager.Backup.SourcePath.ToString());
+			var targetPath = Path.Combine(manager.BasePath, manager.Backup.TargetPath.ToString());
 
-			var latestBackupPath = await GetLatestBackupPath(targetPath);
+			var exclude = new HashSet<string>
+			{
+				Path.GetRelativePath(sourcePath, manager.BasePath),
+			};
+
+			var backups = await manager.GetBackupsSetAsync();
+			var latestBackupPath = backups.LastOrDefault()?.Path.ToString();
 
 			if (onDemand)
 			{
 				var destinationPath = Path.Combine(targetPath, DateTime.Now.ToString(Common.BackupFormat, CultureInfo.InvariantCulture) + Common.OnDemandSuffix);
-
-				var exclude = new HashSet<string>
-				{
-					Path.GetRelativePath(sourcePath, path),
-				};
 
 				await DoBackup(
 					sourcePath,
 					latestBackupPath,
 					destinationPath,
 					exclude,
-					backup.UseHardLinks,
-					backup.FastCompare,
-					dryRun);
+					manager.Backup.UseHardLinks,
+					manager.Backup.FastCompare,
+					manager.DryRun);
 			}
 			else
 			{
@@ -88,34 +98,6 @@ namespace QuickBackup.Commands
 			}
 
 			await Console.Out.WriteLineAsync();
-		}
-
-		public static Task<string?> GetLatestBackupPath(string target)
-		{
-			var backups = new DirectoryInfo(target);
-
-			string? latestPath = null;
-			DateTimeOffset? latestDate = null;
-
-			foreach (var backup in backups.EnumerateDirectories())  // async currently not supported
-			{
-				var name = backup.Name;
-				if (name.EndsWith(Common.OnDemandSuffix))
-					name = name.Substring(0, name.Length - Common.OnDemandSuffix.Length);
-				else if (name.EndsWith(Common.AtBootSuffix))
-					name = name.Substring(0, name.Length - Common.AtBootSuffix.Length);
-
-				if (!DateTime.TryParseExact(name, Common.BackupFormat, CultureInfo.InvariantCulture, DateTimeStyles.AssumeLocal, out var date))
-					continue;
-
-				if (latestDate == null || date > latestDate)
-				{
-					latestDate = date;
-					latestPath = backup.ToString();
-				}
-			}
-
-			return Task.FromResult(latestPath);
 		}
 
 		public static async Task DoBackup(
@@ -128,7 +110,7 @@ namespace QuickBackup.Commands
 			bool dryRun)
 		{
 			await Console.Out.WriteLineAsync($"Backing up from '{source}' to '{destination}'...{(dryRun ? " (DRY-RUN)" : "")}");
-			await Console.Out.WriteLineAsync($"Latest backup path: {latest ?? "none"}");
+			await Console.Out.WriteLineAsync($"Latest backup path: {(latest == null ? "none" : $"'{latest}'")}");
 
 			var unvisited = new List<FileSystemInfo>
 			{
@@ -143,7 +125,7 @@ namespace QuickBackup.Commands
 				var relativePath = Path.GetRelativePath(source, fileSystemEntry.FullName);
 				var destinationPath = Path.Combine(destination, relativePath);
 
-				Console.Write($"'{relativePath}'");
+				await Console.Out.WriteAsync($"'{relativePath}'");
 
 				try
 				{
@@ -171,16 +153,19 @@ namespace QuickBackup.Commands
 						{
 							var latestFile = new FileInfo(Path.Combine(latest, relativePath));
 
-							var areEqual = (
-								latestFile.Exists &&
-								sourceFile.LastWriteTimeUtc == latestFile.LastWriteTimeUtc &&
-								sourceFile.Length == latestFile.Length
-							);
-
-							if (areEqual && !fastCompare)
+							var areEqual = latestFile.Exists && sourceFile.Length == latestFile.Length;
+							if (areEqual)
 							{
-								// TODO: compare files byte-by-byte.
-								//areEqual = ...;
+								if (fastCompare)
+								{
+									// just compare last modification date
+									areEqual = sourceFile.LastWriteTimeUtc == latestFile.LastWriteTimeUtc;
+								}
+								else
+								{
+									// compare contents
+									areEqual = await StreamComparer.AreFilesEqualAsync(sourceFile.FullName, latestFile.FullName);
+								}
 							}
 
 							if (areEqual)
@@ -213,7 +198,7 @@ namespace QuickBackup.Commands
 				}
 				catch (Exception e)
 				{
-					await Console.Out.WriteLineAsync(" skipped (error)");
+					await Console.Out.WriteLineAsync(" failed (error, see next line)");
 					await Console.Error.WriteLineAsync(e.ToString());
 				}
 			}

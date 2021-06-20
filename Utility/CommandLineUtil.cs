@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.IO;
-using static System.CommandLine.Rendering.Ansi;
+using System.Threading.Tasks;
 using static System.CommandLine.Rendering.Ansi.Color;
 
 namespace QuickBackup.Utility
@@ -20,8 +20,8 @@ namespace QuickBackup.Utility
 			"yes", "y", "true", "t", "1",
 		};
 
-		[return: NotNullIfNotNull("fallback")]
-		public static T? AskValue<T>(
+		[return: NotNullIfNotNull("fallback")]  // not supported, https://github.com/dotnet/csharplang/discussions/2793
+		public static async Task<T?> AskValueAsync<T>(
 			string? name,
 			string? description,
 			bool allowNull = false,
@@ -37,26 +37,26 @@ namespace QuickBackup.Utility
 				};
 
 				if (description != null)
-					Console.WriteLine($"{Foreground.LightGreen}>{Foreground.Default} {description}");
+					await Console.Out.WriteLineAsync($"{Foreground.LightGreen}>{Foreground.Default} {description}");
 
 				if (!string.IsNullOrEmpty(name))
-					Console.Write($"{Foreground.LightYellow}{name}{Foreground.Default}");
+					await Console.Out.WriteAsync($"{Foreground.LightYellow}{name}{Foreground.Default}");
 
 				if (fallback != null)
 				{
 					if (!string.IsNullOrEmpty(name))
-						Console.Write(" ");
+						await Console.Out.WriteAsync(" ");
 
-					Console.Write($"[default: {fallbackRaw}]");
+					await Console.Out.WriteAsync($"[default: {fallbackRaw}]");
 				}
 
-				Console.Write($": ");
+				await Console.Out.WriteAsync($": ");
 
 				string? valueRaw;
 				if (autoConfirm)
 				{
 					valueRaw = "";
-					Console.WriteLine();
+					await Console.Out.WriteLineAsync();
 				}
 				else
 				{
@@ -80,7 +80,7 @@ namespace QuickBackup.Utility
 				}
 				catch (Exception e) when (e is InvalidCastException or FormatException or OverflowException)
 				{
-					Console.WriteLine("Invalid value.");
+					await Console.Out.WriteLineAsync("Invalid value.");
 					autoConfirm = false;
 				}
 			}

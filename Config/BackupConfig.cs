@@ -1,4 +1,5 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 using System.Text.Json.Serialization;
 
 namespace QuickBackup.Config
@@ -8,5 +9,9 @@ namespace QuickBackup.Config
 		[JsonPropertyName("backups")]
 		public IList<Backup> Backups { get; set; }
 			= new List<Backup>();
+
+		[JsonPropertyName("firstDayOfweek")]
+		[JsonConverter(typeof(JsonStringEnumConverter))]
+		public DayOfWeek FirstDayOfWeek { get; set; }
 	}
 }
