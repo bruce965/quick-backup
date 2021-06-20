@@ -7,6 +7,7 @@ using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using QuickBackup.Config;
+using QuickBackup.Data;
 using QuickBackup.Logic;
 using QuickBackup.Utility;
 
@@ -78,38 +79,83 @@ namespace QuickBackup.Commands
 			var backups = await manager.GetBackupsSetAsync();
 			var latestBackupPath = backups.LastOrDefault()?.Path.ToString();
 
+			var date = DateTime.Now;
+
 			if (onDemand)
 			{
-				var destinationPath = Path.Combine(targetPath, DateTime.Now.ToString(Common.BackupFormat, CultureInfo.InvariantCulture) + Common.OnDemandSuffix);
+				var destinationPath = Path.Combine(targetPath, date.ToString(Common.BackupFormat, CultureInfo.InvariantCulture) + Common.OnDemandSuffix);
 
-				await DoBackup(
+				var backup = await DoBackup(
 					sourcePath,
 					latestBackupPath,
 					destinationPath,
+					date,
+					BackupType.OnDemand,
 					exclude,
 					manager.Backup.UseHardLinks,
 					manager.Backup.FastCompare,
 					manager.DryRun);
+
+				backups.Add(backup);
 			}
 			else
 			{
-				// TODO
-				await Console.Error.WriteLineAsync("Not implemented, only on-demand backups are currently supported.");
+				var isAtBoot = manager.Backup.AtBootCount > 0 && backups.Find(date, BackupType.AtBoot, manager.Config.FirstDayOfWeek) == null;
+				var isYearly = manager.Backup.YearlyCount > 0 && backups.Find(date, BackupType.Yearly, manager.Config.FirstDayOfWeek) == null;
+				var isMonthly = manager.Backup.MonthlyCount > 0 && backups.Find(date, BackupType.Monthly, manager.Config.FirstDayOfWeek) == null;
+				var isWeekly = manager.Backup.WeeklyCount > 0 && backups.Find(date, BackupType.Weekly, manager.Config.FirstDayOfWeek) == null;
+				var isDaily = manager.Backup.DailyCount > 0 && backups.Find(date, BackupType.Daily, manager.Config.FirstDayOfWeek) == null;
+				var isHourly = manager.Backup.HourlyCount > 0 && backups.Find(date, BackupType.Hourly, manager.Config.FirstDayOfWeek) == null;
+
+				var type = (
+					default(BackupType)
+					| (isAtBoot ? BackupType.AtBoot : 0)
+					| (isYearly ? BackupType.Yearly : 0)
+					| (isMonthly ? BackupType.Monthly : 0)
+					| (isWeekly ? BackupType.Weekly : 0)
+					| (isDaily ? BackupType.Daily : 0)
+					| (isHourly ? BackupType.Hourly : 0)
+				);
+
+				if (type != default)
+				{
+					var destinationPath = Path.Combine(targetPath, date.ToString(Common.BackupFormat, CultureInfo.InvariantCulture) + (isAtBoot ? Common.AtBootSuffix : ""));
+
+					var backup = await DoBackup(
+						sourcePath,
+						latestBackupPath,
+						destinationPath,
+						date,
+						type,
+						exclude,
+						manager.Backup.UseHardLinks,
+						manager.Backup.FastCompare,
+						manager.DryRun);
+
+					backups.Add(backup);
+				}
+				else
+				{
+					await Console.Out.WriteLineAsync($"Path '{sourcePath}' does not need a backup.");
+				}
 			}
 
 			await Console.Out.WriteLineAsync();
 		}
 
-		public static async Task DoBackup(
+		public static async Task<BackupInfo> DoBackup(
 			string source,
 			string? latest,
 			string destination,
+			DateTime date,
+			BackupType type,
 			HashSet<string> exclude,
 			bool useHardLinks,
 			bool fastCompare,
 			bool dryRun)
 		{
 			await Console.Out.WriteLineAsync($"Backing up from '{source}' to '{destination}'...{(dryRun ? " (DRY-RUN)" : "")}");
+			await Console.Out.WriteLineAsync($"Backup type: {type}");
 			await Console.Out.WriteLineAsync($"Latest backup path: {(latest == null ? "none" : $"'{latest}'")}");
 
 			var unvisited = new List<FileSystemInfo>
@@ -123,7 +169,7 @@ namespace QuickBackup.Commands
 				unvisited.RemoveAt(unvisited.Count - 1);
 
 				var relativePath = Path.GetRelativePath(source, fileSystemEntry.FullName);
-				var destinationPath = Path.Combine(destination, relativePath);
+				var destinationPath = Path.Combine(destination + Common.PartialSuffix, relativePath);
 
 				await Console.Out.WriteAsync($"'{relativePath}'");
 
@@ -203,7 +249,11 @@ namespace QuickBackup.Commands
 				}
 			}
 
+			new DirectoryInfo(destination + Common.PartialSuffix).MoveTo(destination);  // async currently not supported
+
 			await Console.Out.WriteLineAsync($"Done.");
+
+			return new BackupInfo(new DirectoryInfo(destination), date, type);
 		}
 	}
 }

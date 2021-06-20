@@ -41,7 +41,7 @@ namespace QuickBackup.Logic
 
 			var backups = await GetBackupsSetAsync();
 
-			// TODO
+			// TODO: clean.
 			await Console.Error.WriteLineAsync("Not implemented, backups will not be cleaned.");
 
 			await Console.Out.WriteLineAsync("Done.");
@@ -77,22 +77,26 @@ namespace QuickBackup.Logic
 				if (!DateTime.TryParseExact(name, Common.BackupFormat, CultureInfo.InvariantCulture, DateTimeStyles.AssumeLocal, out var date))
 					continue;  // directory name does not match backup format, skip
 
-				// only the first backup for each period counts
-				var isYearly = backups.Find(date, BackupType.Yearly, Config.FirstDayOfWeek) == null;
-				var isMonthly = backups.Find(date, BackupType.Monthly, Config.FirstDayOfWeek) == null;
-				var isWeekly = backups.Find(date, BackupType.Weekly, Config.FirstDayOfWeek) == null;
-				var isDaily = backups.Find(date, BackupType.Daily, Config.FirstDayOfWeek) == null;
-				var isHourly = backups.Find(date, BackupType.Hourly, Config.FirstDayOfWeek) == null;
+				var type = BackupType.OnDemand;
+				if (!isOnDemand)
+				{
+					// only the first backup for each period counts
+					var isYearly = backups.Find(date, BackupType.Yearly, Config.FirstDayOfWeek) == null;
+					var isMonthly = backups.Find(date, BackupType.Monthly, Config.FirstDayOfWeek) == null;
+					var isWeekly = backups.Find(date, BackupType.Weekly, Config.FirstDayOfWeek) == null;
+					var isDaily = backups.Find(date, BackupType.Daily, Config.FirstDayOfWeek) == null;
+					var isHourly = backups.Find(date, BackupType.Hourly, Config.FirstDayOfWeek) == null;
 
-				var type = (
-					default(BackupType)
-					| (isAtBoot ? BackupType.AtBoot : 0)
-					| (isYearly ? BackupType.Yearly : 0)
-					| (isMonthly ? BackupType.Monthly : 0)
-					| (isWeekly ? BackupType.Weekly : 0)
-					| (isDaily ? BackupType.Daily : 0)
-					| (isHourly ? BackupType.Hourly : 0)
-				);
+					type = (
+						default(BackupType)
+						| (isAtBoot ? BackupType.AtBoot : 0)
+						| (isYearly ? BackupType.Yearly : 0)
+						| (isMonthly ? BackupType.Monthly : 0)
+						| (isWeekly ? BackupType.Weekly : 0)
+						| (isDaily ? BackupType.Daily : 0)
+						| (isHourly ? BackupType.Hourly : 0)
+					);
+				}
 
 				backups.Add(new BackupInfo(directory, date, type));
 			}

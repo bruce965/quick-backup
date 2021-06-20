@@ -16,5 +16,8 @@ namespace QuickBackup.Config
 
 		public static string AtBootSuffix
 			=> "_boot";
+
+		public static string PartialSuffix
+			=> "_partial";
 	}
 }
